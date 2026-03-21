@@ -3,7 +3,9 @@ using System.Diagnostics;
 using System.IO;
 using System.Windows;
 using System.Windows.Controls;
+using System.Windows.Controls.Primitives;
 using System.Windows.Input;
+using System.Windows.Media;
 
 namespace TaskbarDrawer;
 
@@ -36,12 +38,20 @@ public partial class MainWindow : Window
     }
     public static readonly DependencyProperty ButtonHeightProperty = DependencyProperty.Register("ButtonHeight", typeof(double), typeof(MainWindow), new PropertyMetadata(85.0));
 
-    public bool ShowIconNames
+    public DisplayMode CurrentDisplayMode
     {
-        get { return (bool)GetValue(ShowIconNamesProperty); }
-        set { SetValue(ShowIconNamesProperty, value); }
+        get { return (DisplayMode)GetValue(CurrentDisplayModeProperty); }
+        set { SetValue(CurrentDisplayModeProperty, value); }
     }
-    public static readonly DependencyProperty ShowIconNamesProperty = DependencyProperty.Register("ShowIconNames", typeof(bool), typeof(MainWindow), new PropertyMetadata(true));
+    public static readonly DependencyProperty CurrentDisplayModeProperty = DependencyProperty.Register("CurrentDisplayMode", typeof(DisplayMode), typeof(MainWindow), new PropertyMetadata(DisplayMode.IconAndName, OnDisplayModeChanged));
+
+    private static void OnDisplayModeChanged(DependencyObject d, DependencyPropertyChangedEventArgs e)
+    {
+        if (d is MainWindow w)
+        {
+            w.UpdateButtonMetrics();
+        }
+    }
 
     private static void OnSizeChanged(DependencyObject d, DependencyPropertyChangedEventArgs e)
     {
@@ -53,8 +63,22 @@ public partial class MainWindow : Window
 
     private void UpdateButtonMetrics()
     {
-        ButtonWidth = IconSize + 39;
-        ButtonHeight = ShowIconNames ? IconSize + 49 : IconSize + 15;
+        switch (CurrentDisplayMode)
+        {
+            case DisplayMode.IconOnly:
+                ButtonWidth = IconSize + 15;
+                ButtonHeight = IconSize + 15;
+                break;
+            case DisplayMode.NameOnly:
+                ButtonWidth = 100;
+                ButtonHeight = 36;
+                break;
+            case DisplayMode.IconAndName:
+            default:
+                ButtonWidth = IconSize + 39;
+                ButtonHeight = IconSize + 49;
+                break;
+        }
     }
 
     public MainWindow()
@@ -65,9 +89,9 @@ public partial class MainWindow : Window
         Width = _settings.WindowWidth;
         Height = _settings.WindowHeight;
         IconSize = _settings.IconSize;
-        ShowIconNames = _settings.ShowIconNames;
+        CurrentDisplayMode = _settings.DisplayMode;
         DarkModeCheck.IsChecked = _settings.IsDarkMode;
-        ShowNamesCheck.IsChecked = _settings.ShowIconNames;
+        UpdateDisplayModeRadioButtons();
         UpdateButtonMetrics();
         ApplyTheme();
 
@@ -100,7 +124,7 @@ public partial class MainWindow : Window
         {
             Icon = appIcon ?? System.Drawing.SystemIcons.Application,
             Visible = true,
-            Text = "Taskbar Drawer"
+            Text = "AppDrawer"
         };
         
         _notifyIcon.Click += (s, e) => ToggleVisibility();
@@ -139,15 +163,26 @@ public partial class MainWindow : Window
         }
     }
 
-    private void ShowNames_Changed(object sender, RoutedEventArgs e)
+    private void DisplayMode_Changed(object sender, RoutedEventArgs e)
     {
-        if (ShowNamesCheck.IsChecked.HasValue && _settings != null)
-        {
-            ShowIconNames = ShowNamesCheck.IsChecked.Value;
-            _settings.ShowIconNames = ShowIconNames;
-            UpdateButtonMetrics();
-            SaveSettings();
-        }
+        if (_settings == null || !(sender is System.Windows.Controls.RadioButton radio)) return;
+
+        if (radio.Name == "IconAndNameRadio")
+            CurrentDisplayMode = DisplayMode.IconAndName;
+        else if (radio.Name == "IconOnlyRadio")
+            CurrentDisplayMode = DisplayMode.IconOnly;
+        else if (radio.Name == "NameOnlyRadio")
+            CurrentDisplayMode = DisplayMode.NameOnly;
+
+        _settings.DisplayMode = CurrentDisplayMode;
+        SaveSettings();
+    }
+
+    private void UpdateDisplayModeRadioButtons()
+    {
+        IconAndNameRadio.IsChecked = CurrentDisplayMode == DisplayMode.IconAndName;
+        IconOnlyRadio.IsChecked = CurrentDisplayMode == DisplayMode.IconOnly;
+        NameOnlyRadio.IsChecked = CurrentDisplayMode == DisplayMode.NameOnly;
     }
 
     private void IconSizeSlider_ValueChanged(object sender, RoutedPropertyChangedEventArgs<double> e)
@@ -271,21 +306,41 @@ public partial class MainWindow : Window
     {
         if (sender is System.Windows.Controls.Button btn && btn.DataContext is ShortcutItem item)
         {
-            try
+            if (item.IsFolder && item.SubItems != null && item.SubItems.Count > 0)
             {
-                var pInfo = new ProcessStartInfo
-                {
-                    FileName = item.FilePath,
-                    UseShellExecute = true
-                };
-                Process.Start(pInfo);
+                // Toggle folder expand/collapse
+                item.IsExpanded = !item.IsExpanded;
+                LoadShortcuts(); // Refresh to show/hide sub-items
             }
-            catch (Exception ex)
+            else
             {
-                System.Windows.MessageBox.Show("无法启动程序: " + ex.Message);
+                // Launch shortcut directly
+                LaunchShortcut(item);
             }
-            HideWindow();
         }
+    }
+
+    private void SubMenuItem_Click(object sender, RoutedEventArgs e)
+    {
+        // No longer needed but keep for compatibility
+    }
+
+    private void LaunchShortcut(ShortcutItem item)
+    {
+        try
+        {
+            var pInfo = new ProcessStartInfo
+            {
+                FileName = item.FilePath,
+                UseShellExecute = true
+            };
+            Process.Start(pInfo);
+        }
+        catch (Exception ex)
+        {
+            System.Windows.MessageBox.Show("无法启动程序: " + ex.Message);
+        }
+        HideWindow();
     }
 
     private void Window_SizeChanged(object sender, SizeChangedEventArgs e)

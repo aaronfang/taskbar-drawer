@@ -8,12 +8,27 @@ using System.Windows.Media.Imaging;
 
 namespace TaskbarDrawer;
 
-public class ShortcutItem
+public class ShortcutItem : System.ComponentModel.INotifyPropertyChanged
 {
     public required string Name { get; set; }
     public required string FilePath { get; set; }
     public required string TargetPath { get; set; }
     public System.Windows.Media.ImageSource? Icon { get; set; }
+    public bool IsFolder { get; set; }
+    public List<ShortcutItem>? SubItems { get; set; }
+    
+    private bool _isExpanded;
+    public bool IsExpanded 
+    { 
+        get => _isExpanded; 
+        set 
+        { 
+            _isExpanded = value; 
+            PropertyChanged?.Invoke(this, new System.ComponentModel.PropertyChangedEventArgs(nameof(IsExpanded)));
+        } 
+    }
+
+    public event System.ComponentModel.PropertyChangedEventHandler? PropertyChanged;
 }
 
 public class ShortcutCategory
@@ -48,30 +63,60 @@ public static class ShortcutHelper
 
     private static bool IsShortcut(string f) => f.EndsWith(".lnk", StringComparison.OrdinalIgnoreCase) || f.EndsWith(".url", StringComparison.OrdinalIgnoreCase);
 
+    private static Dictionary<string, ShortcutItem> _folderStates = new Dictionary<string, ShortcutItem>();
+
     public static List<ShortcutCategory> GetCategoriesFromFolder(string rootPath)
     {
         var categories = new List<ShortcutCategory>();
         if (!Directory.Exists(rootPath)) return categories;
 
-        // 1. Root files (Uncategorized)
-        var rootFiles = Directory.GetFiles(rootPath).Where(IsShortcut).ToArray();
-        if (rootFiles.Length > 0)
-        {
-            categories.Add(new ShortcutCategory { Name = "常用 (Default)", Shortcuts = GetShortcuts(rootFiles) });
-        }
+        var allItems = new List<ShortcutItem>();
 
-        // 2. Subdirectories
+        // 1. Root files - direct shortcuts
+        var rootFiles = Directory.GetFiles(rootPath).Where(IsShortcut).ToArray();
+        allItems.AddRange(GetShortcuts(rootFiles));
+
+        // 2. Subdirectories - show as folder buttons
         foreach (var dir in Directory.GetDirectories(rootPath))
         {
             var files = Directory.GetFiles(dir).Where(IsShortcut).ToArray();
             if (files.Length > 0)
             {
-                categories.Add(new ShortcutCategory { Name = Path.GetFileName(dir), Shortcuts = GetShortcuts(files) });
+                // Preserve folder expanded state
+                ShortcutItem? existingFolder;
+                _folderStates.TryGetValue(dir, out existingFolder);
+                
+                var folderItem = new ShortcutItem
+                {
+                    Name = "📁 " + Path.GetFileName(dir),
+                    FilePath = dir,
+                    TargetPath = dir,
+                    IsFolder = true,
+                    SubItems = GetShortcuts(files),
+                    Icon = null,
+                    IsExpanded = existingFolder?.IsExpanded ?? false
+                };
+                
+                _folderStates[dir] = folderItem;
+                allItems.Add(folderItem);
+                
+                // If expanded, add sub-items right after the folder
+                if (folderItem.IsExpanded && folderItem.SubItems != null)
+                {
+                    allItems.AddRange(folderItem.SubItems);
+                }
             }
+        }
+
+        if (allItems.Count > 0)
+        {
+            categories.Add(new ShortcutCategory { Name = "所有项目 (All Items)", Shortcuts = allItems });
         }
 
         return categories;
     }
+
+
 
     private static List<ShortcutItem> GetShortcuts(string[] files)
     {
