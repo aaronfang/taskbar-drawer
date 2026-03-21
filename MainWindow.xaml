@@ -1,0 +1,126 @@
+﻿<Window x:Class="TaskbarDrawer.MainWindow"
+        xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        Title="Taskbar Drawer" Height="320" Width="360" Icon="icon.ico"
+        WindowStyle="None" AllowsTransparency="True" Background="Transparent"
+        Topmost="True" ShowInTaskbar="False" ResizeMode="CanResize"
+        Deactivated="Window_Deactivated" Loaded="Window_Loaded"
+        Closing="Window_Closing" SizeChanged="Window_SizeChanged" x:Name="Self">
+    <WindowChrome.WindowChrome>
+        <WindowChrome CaptionHeight="0" ResizeBorderThickness="8" GlassFrameThickness="0" CornerRadius="0"/>
+    </WindowChrome.WindowChrome>
+    <Window.Resources>
+        <BooleanToVisibilityConverter x:Key="BooleanToVisibilityConverter"/>
+        <Style x:Key="IconButtonStyle" TargetType="Button">
+            <Setter Property="Background" Value="Transparent"/>
+            <Setter Property="BorderThickness" Value="0"/>
+            <Setter Property="Foreground" Value="{DynamicResource TextBrush}"/>
+            <Setter Property="Template">
+                <Setter.Value>
+                    <ControlTemplate TargetType="Button">
+                        <Border Background="{TemplateBinding Background}" CornerRadius="8" Padding="5">
+                            <ContentPresenter HorizontalAlignment="Center" VerticalAlignment="Center"/>
+                        </Border>
+                        <ControlTemplate.Triggers>
+                            <Trigger Property="IsMouseOver" Value="True">
+                                <Setter Property="Background" Value="{DynamicResource HoverBrush}"/>
+                            </Trigger>
+                            <Trigger Property="IsPressed" Value="True">
+                                <Setter Property="Background" Value="{DynamicResource PressedBrush}"/>
+                            </Trigger>
+                        </ControlTemplate.Triggers>
+                    </ControlTemplate>
+                </Setter.Value>
+            </Setter>
+        </Style>
+    </Window.Resources>
+    
+    <Border Background="{DynamicResource BackgroundBrush}" CornerRadius="12" BorderThickness="1" BorderBrush="{DynamicResource BorderBrush}" Margin="15">
+        <Border.Effect>
+            <DropShadowEffect BlurRadius="20" ShadowDepth="4" Opacity="0.2"/>
+        </Border.Effect>
+        <Grid>
+            <!-- MAIN VIEW -->
+            <Grid x:Name="MainView" Visibility="Visible">
+                <Grid.RowDefinitions>
+                    <RowDefinition Height="Auto"/>
+                    <RowDefinition Height="Auto"/>
+                    <RowDefinition Height="*"/>
+                </Grid.RowDefinitions>
+                
+                <DockPanel Grid.Row="0" Margin="15,15,15,5">
+                    <TextBlock Text="抽屉菜单" DockPanel.Dock="Left" FontWeight="SemiBold" FontSize="16" Foreground="{DynamicResource TextBrush}" VerticalAlignment="Center"/>
+                    <Button Content="❌" ToolTip="退出" DockPanel.Dock="Right" HorizontalAlignment="Right" VerticalAlignment="Center" Padding="8,4" Margin="5,0,0,0" Background="Transparent" BorderThickness="0" Cursor="Hand" Click="ExitApp_Click" Foreground="{DynamicResource DangerBrush}"/>
+                    <Button Content="⚙️" ToolTip="设置" DockPanel.Dock="Right" HorizontalAlignment="Right" VerticalAlignment="Center" Padding="8,4" Background="Transparent" BorderThickness="0" Cursor="Hand" Click="ToggleSettings_Click" Foreground="{DynamicResource LinkBrush}"/>
+                </DockPanel>
+                
+                <Border Grid.Row="1" Height="1" Margin="15,5,15,10" Background="{DynamicResource SeparatorBrush}"/>
+                
+                <ScrollViewer Grid.Row="2" VerticalScrollBarVisibility="Auto" Margin="10,0,10,10">
+                    <ItemsControl x:Name="ShortcutList">
+                        <ItemsControl.ItemTemplate>
+                            <DataTemplate>
+                                <StackPanel Margin="0,0,0,10">
+                                    <TextBlock Text="{Binding Name}" FontWeight="Bold" Margin="5,0,0,5" Foreground="{DynamicResource SecondaryTextBrush}"/>
+                                    <ItemsControl ItemsSource="{Binding Shortcuts}">
+                                        <ItemsControl.ItemsPanel>
+                                            <ItemsPanelTemplate>
+                                                <WrapPanel Orientation="Horizontal" HorizontalAlignment="Left"/>
+                                            </ItemsPanelTemplate>
+                                        </ItemsControl.ItemsPanel>
+                                        <ItemsControl.ItemTemplate>
+                                            <DataTemplate>
+                                                <Button Style="{StaticResource IconButtonStyle}" Width="{Binding RelativeSource={RelativeSource AncestorType=Window}, Path=ButtonWidth}" Height="{Binding RelativeSource={RelativeSource AncestorType=Window}, Path=ButtonHeight}" Margin="2" Click="Shortcut_Click">
+                                                    <StackPanel VerticalAlignment="Top">
+                                                        <Image Source="{Binding Icon}" Width="{Binding RelativeSource={RelativeSource AncestorType=Window}, Path=IconSize}" Height="{Binding RelativeSource={RelativeSource AncestorType=Window}, Path=IconSize}" Margin="0,5,0,5" RenderOptions.BitmapScalingMode="HighQuality"/>
+                                                        <TextBlock Text="{Binding Name}" Visibility="{Binding RelativeSource={RelativeSource AncestorType=Window}, Path=ShowIconNames, Converter={StaticResource BooleanToVisibilityConverter}}" TextAlignment="Center" TextWrapping="Wrap" FontSize="11" Foreground="{DynamicResource TextBrush}" MaxHeight="32" TextTrimming="CharacterEllipsis"/>
+                                                    </StackPanel>
+                                                </Button>
+                                            </DataTemplate>
+                                        </ItemsControl.ItemTemplate>
+                                    </ItemsControl>
+                                </StackPanel>
+                            </DataTemplate>
+                        </ItemsControl.ItemTemplate>
+                    </ItemsControl>
+                </ScrollViewer>
+            </Grid>
+
+            <!-- SETTINGS VIEW -->
+            <Grid x:Name="SettingsView" Visibility="Collapsed" Margin="15">
+                <Grid.RowDefinitions>
+                    <RowDefinition Height="Auto"/>
+                    <RowDefinition Height="Auto"/>
+                    <RowDefinition Height="Auto"/>
+                    <RowDefinition Height="Auto"/>
+                    <RowDefinition Height="Auto"/>
+                    <RowDefinition Height="*"/>
+                    <RowDefinition Height="Auto"/>
+                </Grid.RowDefinitions>
+                
+                <TextBlock Text="设置 (Settings)" FontWeight="SemiBold" FontSize="16" Foreground="{DynamicResource TextBrush}" Margin="0,0,0,10"/>
+                
+                <StackPanel Grid.Row="1" Margin="0,10,0,0">
+                    <TextBlock Text="图标大小 (Icon Size)" Foreground="{DynamicResource SecondaryTextBrush}" Margin="0,0,0,5"/>
+                    <Slider Minimum="24" Maximum="72" Value="{Binding RelativeSource={RelativeSource AncestorType=Window}, Path=IconSize}" ValueChanged="IconSizeSlider_ValueChanged"/>
+                </StackPanel>
+                
+                <StackPanel Grid.Row="2" Margin="0,15,0,0" Orientation="Horizontal">
+                    <TextBlock Text="暗色模式 (Dark Mode)" Foreground="{DynamicResource SecondaryTextBrush}" VerticalAlignment="Center" Width="150"/>
+                    <CheckBox x:Name="DarkModeCheck" VerticalAlignment="Center" Checked="Theme_Changed" Unchecked="Theme_Changed"/>
+                </StackPanel>
+
+                <StackPanel Grid.Row="3" Margin="0,15,0,0" Orientation="Horizontal">
+                    <TextBlock Text="显示名称 (Show Names)" Foreground="{DynamicResource SecondaryTextBrush}" VerticalAlignment="Center" Width="150"/>
+                    <CheckBox x:Name="ShowNamesCheck" VerticalAlignment="Center" Checked="ShowNames_Changed" Unchecked="ShowNames_Changed"/>
+                </StackPanel>
+
+                <Button Grid.Row="4" Content="📂 管理分类 (打开文件夹)" Margin="0,20,0,0" Padding="8" Click="OpenFolder_Click" Background="{DynamicResource BackgroundBrush}" Foreground="{DynamicResource LinkBrush}" BorderBrush="{DynamicResource BorderBrush}"/>
+                <TextBlock Grid.Row="5" Text="提示：在上面的文件夹中新建子文件夹，把快捷方式放入其中即可实现分类显示。拖拽边缘可调整窗口大小。" TextWrapping="Wrap" Foreground="{DynamicResource SecondaryTextBrush}" Margin="0,10,0,0" FontSize="11" VerticalAlignment="Top"/>
+
+                <Button Grid.Row="6" Content="⬅️ 返回" HorizontalAlignment="Left" Padding="15,6" Click="ToggleSettings_Click" Background="{DynamicResource BackgroundBrush}" Foreground="{DynamicResource TextBrush}" BorderBrush="{DynamicResource BorderBrush}" BorderThickness="1"/>
+            </Grid>
+
+        </Grid>
+    </Border>
+</Window>

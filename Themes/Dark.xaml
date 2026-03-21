@@ -1,0 +1,11 @@
+<ResourceDictionary xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation" xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml">
+    <SolidColorBrush x:Key="BackgroundBrush" Color="#202020"/>
+    <SolidColorBrush x:Key="BorderBrush" Color="#444444"/>
+    <SolidColorBrush x:Key="TextBrush" Color="#EEEEEE"/>
+    <SolidColorBrush x:Key="SecondaryTextBrush" Color="#AAAAAA"/>
+    <SolidColorBrush x:Key="SeparatorBrush" Color="#444444"/>
+    <SolidColorBrush x:Key="HoverBrush" Color="#333333"/>
+    <SolidColorBrush x:Key="PressedBrush" Color="#222222"/>
+    <SolidColorBrush x:Key="LinkBrush" Color="#4EB4FF"/>
+    <SolidColorBrush x:Key="DangerBrush" Color="#FF848A"/>
+</ResourceDictionary>
