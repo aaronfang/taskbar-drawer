@@ -16,6 +16,12 @@ public partial class MainWindow : Window
     private System.Windows.Forms.NotifyIcon? _notifyIcon;
     private DateTime _lastDeactivated = DateTime.MinValue;
     private bool _isRealClose = false;
+    
+    // 拖拽相关字段
+    private System.Windows.Point _dragStartPoint;
+    private ShortcutItem? _draggedItem;
+    private string? _draggedCategory;
+    private bool _isDragging = false;
 
     public double IconSize
     {
@@ -236,7 +242,7 @@ public partial class MainWindow : Window
 
     private void LoadShortcuts()
     {
-        var categories = ShortcutHelper.GetCategoriesFromFolder(_shortcutsFolder);
+        var categories = ShortcutHelper.GetCategoriesFromFolder(_shortcutsFolder, _settings.CustomOrder, _settings.FolderExpandStates);
         ShortcutList.ItemsSource = categories;
     }
 
@@ -304,6 +310,12 @@ public partial class MainWindow : Window
 
     private void Shortcut_Click(object sender, RoutedEventArgs e)
     {
+        // 如果正在拖拽，不处理点击
+        if (_isDragging)
+        {
+            return;
+        }
+        
         if (sender is System.Windows.Controls.Button btn && btn.DataContext is ShortcutItem item)
         {
             if (item.IsFolder && item.SubItems != null && item.SubItems.Count > 0)
@@ -356,6 +368,153 @@ public partial class MainWindow : Window
     private void SaveSettings()
     {
         SettingsManager.Save(_settings);
+    }
+
+    // 拖拽事件处理方法
+    private void Icon_PreviewMouseLeftButtonDown(object sender, MouseButtonEventArgs e)
+    {
+        if (sender is System.Windows.Controls.Button button && button.DataContext is ShortcutItem item && !item.IsFolder)
+        {
+            _dragStartPoint = e.GetPosition(null);
+            _draggedItem = item;
+            _isDragging = false;
+            
+            // 找到所属的分组
+            if (ShortcutList.ItemsSource is System.Collections.IEnumerable categories)
+            {
+                foreach (ShortcutCategory category in categories)
+                {
+                    if (category.Shortcuts.Contains(item))
+                    {
+                        _draggedCategory = category.FolderPath ?? "root";
+                        break;
+                    }
+                }
+            }
+        }
+    }
+
+    private void Icon_PreviewMouseMove(object sender, System.Windows.Input.MouseEventArgs e)
+    {
+        if (e.LeftButton == MouseButtonState.Pressed && _draggedItem != null && !_isDragging)
+        {
+            System.Windows.Point currentPosition = e.GetPosition(null);
+            System.Windows.Vector diff = _dragStartPoint - currentPosition;
+
+            if (Math.Abs(diff.X) > SystemParameters.MinimumHorizontalDragDistance ||
+                Math.Abs(diff.Y) > SystemParameters.MinimumVerticalDragDistance)
+            {
+                if (sender is System.Windows.Controls.Button button)
+                {
+                    _isDragging = true;
+                    System.Windows.DataObject dragData = new System.Windows.DataObject("ShortcutItem", _draggedItem);
+                    DragDrop.DoDragDrop(button, dragData, System.Windows.DragDropEffects.Move);
+                    _isDragging = false;
+                }
+            }
+        }
+    }
+
+    private void Icon_DragOver(object sender, System.Windows.DragEventArgs e)
+    {
+        if (e.Data.GetDataPresent("ShortcutItem"))
+        {
+            e.Effects = System.Windows.DragDropEffects.Move;
+        }
+        else
+        {
+            e.Effects = System.Windows.DragDropEffects.None;
+        }
+        e.Handled = true;
+    }
+
+    private void Icon_Drop(object sender, System.Windows.DragEventArgs e)
+    {
+        if (e.Data.GetDataPresent("ShortcutItem") && sender is System.Windows.Controls.Button button && button.DataContext is ShortcutItem targetItem)
+        {
+            var draggedItem = e.Data.GetData("ShortcutItem") as ShortcutItem;
+            if (draggedItem != null && draggedItem != targetItem && !targetItem.IsFolder)
+            {
+                // 找到目标所属的分组
+                string? targetCategory = null;
+                if (ShortcutList.ItemsSource is System.Collections.IEnumerable categories)
+                {
+                    foreach (ShortcutCategory category in categories)
+                    {
+                        if (category.Shortcuts.Contains(targetItem))
+                        {
+                            targetCategory = category.FolderPath ?? "root";
+                            break;
+                        }
+                    }
+                }
+
+                // 只允许在同一分组内拖拽
+                if (targetCategory == _draggedCategory)
+                {
+                    ReorderShortcuts(draggedItem, targetItem, _draggedCategory!);
+                }
+            }
+        }
+        
+        _draggedItem = null;
+        _draggedCategory = null;
+    }
+
+    private void ReorderShortcuts(ShortcutItem draggedItem, ShortcutItem targetItem, string categoryKey)
+    {
+        if (ShortcutList.ItemsSource is System.Collections.IEnumerable categories)
+        {
+            foreach (ShortcutCategory category in categories)
+            {
+                var matchKey = category.FolderPath ?? "root";
+                if (matchKey == categoryKey)
+                {
+                    var shortcuts = category.Shortcuts;
+                    int draggedIndex = shortcuts.IndexOf(draggedItem);
+                    int targetIndex = shortcuts.IndexOf(targetItem);
+
+                    if (draggedIndex >= 0 && targetIndex >= 0)
+                    {
+                        // 移动项目
+                        shortcuts.RemoveAt(draggedIndex);
+                        if (draggedIndex < targetIndex)
+                            targetIndex--;
+                        shortcuts.Insert(targetIndex, draggedItem);
+
+                        // 保存新顺序
+                        SaveCustomOrder(categoryKey, shortcuts);
+                        
+                        // 刷新显示
+                        LoadShortcuts();
+                    }
+                    break;
+                }
+            }
+        }
+    }
+
+    private void SaveCustomOrder(string categoryKey, List<ShortcutItem> shortcuts)
+    {
+        // 清除该分组的旧排序
+        var keysToRemove = _settings.CustomOrder.Keys
+            .Where(k => k.StartsWith(categoryKey == "root" ? "root:" : $"folder:{categoryKey}:"))
+            .ToList();
+        foreach (var key in keysToRemove)
+        {
+            _settings.CustomOrder.Remove(key);
+        }
+
+        // 保存新排序
+        for (int i = 0; i < shortcuts.Count; i++)
+        {
+            string key = categoryKey == "root" 
+                ? $"root:{shortcuts[i].FilePath}" 
+                : $"folder:{categoryKey}:{shortcuts[i].FilePath}";
+            _settings.CustomOrder[key] = i;
+        }
+
+        SaveSettings();
     }
 
     protected override void OnClosed(EventArgs e)

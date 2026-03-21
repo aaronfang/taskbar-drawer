@@ -60,73 +60,119 @@
                     <ItemsControl x:Name="ShortcutList">
                         <ItemsControl.ItemTemplate>
                             <DataTemplate>
-                                <ItemsControl ItemsSource="{Binding Shortcuts}">
-                                    <ItemsControl.ItemsPanel>
-                                        <ItemsPanelTemplate>
-                                            <WrapPanel Orientation="Horizontal" HorizontalAlignment="Left"/>
-                                        </ItemsPanelTemplate>
-                                    </ItemsControl.ItemsPanel>
-                                    <ItemsControl.ItemTemplate>
-                                        <DataTemplate>
-                                            <Button Margin="2" Click="Shortcut_Click">
-                                                <Button.Style>
-                                                    <Style TargetType="Button" BasedOn="{StaticResource IconButtonStyle}">
-                                                        <Setter Property="Width" Value="{Binding RelativeSource={RelativeSource AncestorType=Window}, Path=ButtonWidth}"/>
-                                                        <Setter Property="Height" Value="{Binding RelativeSource={RelativeSource AncestorType=Window}, Path=ButtonHeight}"/>
-                                                        <Style.Triggers>
-                                                            <DataTrigger Binding="{Binding IsFolder}" Value="True">
-                                                                <Setter Property="Width" Value="Auto"/>
-                                                                <Setter Property="Height" Value="Auto"/>
-                                                                <Setter Property="Padding" Value="15,8"/>
-                                                            </DataTrigger>
-                                                        </Style.Triggers>
-                                                    </Style>
-                                                </Button.Style>
-                                                <StackPanel VerticalAlignment="Top">
-                                                    <Image Source="{Binding Icon}" Width="{Binding RelativeSource={RelativeSource AncestorType=Window}, Path=IconSize}" Height="{Binding RelativeSource={RelativeSource AncestorType=Window}, Path=IconSize}" Margin="0,5,0,5" RenderOptions.BitmapScalingMode="HighQuality">
-                                                        <Image.Style>
-                                                            <Style TargetType="Image">
-                                                                <Setter Property="Visibility" Value="Visible"/>
+                                <!-- 分组容器 - 根据是否是文件夹显示不同样式 -->
+                                <Border Margin="5" CornerRadius="8">
+                                    <Border.Style>
+                                        <Style TargetType="Border">
+                                            <!-- 默认无边框（用于根目录快捷方式） -->
+                                            <Setter Property="BorderThickness" Value="0"/>
+                                            <Setter Property="Background" Value="Transparent"/>
+                                            <Setter Property="Padding" Value="0"/>
+                                            <Style.Triggers>
+                                                <!-- 文件夹分组有边框和背景 -->
+                                                <DataTrigger Binding="{Binding IsFolder}" Value="True">
+                                                    <Setter Property="BorderThickness" Value="1"/>
+                                                    <Setter Property="BorderBrush" Value="{DynamicResource BorderBrush}"/>
+                                                    <Setter Property="Background" Value="{DynamicResource BackgroundBrush}"/>
+                                                    <Setter Property="Padding" Value="10"/>
+                                                </DataTrigger>
+                                            </Style.Triggers>
+                                        </Style>
+                                    </Border.Style>
+                                    
+                                    <StackPanel>
+                                        <!-- 文件夹标题 -->
+                                        <TextBlock Text="{Binding Name}" FontWeight="SemiBold" FontSize="13" 
+                                                   Foreground="{DynamicResource TextBrush}" Margin="5,0,0,8">
+                                            <TextBlock.Style>
+                                                <Style TargetType="TextBlock">
+                                                    <!-- 默认隐藏（根目录快捷方式不显示标题） -->
+                                                    <Setter Property="Visibility" Value="Collapsed"/>
+                                                    <Style.Triggers>
+                                                        <!-- 文件夹分组显示标题 -->
+                                                        <DataTrigger Binding="{Binding IsFolder}" Value="True">
+                                                            <Setter Property="Visibility" Value="Visible"/>
+                                                        </DataTrigger>
+                                                    </Style.Triggers>
+                                                </Style>
+                                            </TextBlock.Style>
+                                        </TextBlock>
+                                        
+                                        <!-- 图标列表 -->
+                                        <ItemsControl ItemsSource="{Binding Shortcuts}">
+                                            <ItemsControl.ItemsPanel>
+                                                <ItemsPanelTemplate>
+                                                    <WrapPanel Orientation="Horizontal" HorizontalAlignment="Left"/>
+                                                </ItemsPanelTemplate>
+                                            </ItemsControl.ItemsPanel>
+                                            <ItemsControl.ItemTemplate>
+                                                <DataTemplate>
+                                                    <Button Margin="2" Click="Shortcut_Click"
+                                                            PreviewMouseLeftButtonDown="Icon_PreviewMouseLeftButtonDown"
+                                                            PreviewMouseMove="Icon_PreviewMouseMove"
+                                                            AllowDrop="True"
+                                                            DragOver="Icon_DragOver"
+                                                            Drop="Icon_Drop">
+                                                        <Button.Style>
+                                                            <Style TargetType="Button" BasedOn="{StaticResource IconButtonStyle}">
+                                                                <Setter Property="Width" Value="{Binding RelativeSource={RelativeSource AncestorType=Window}, Path=ButtonWidth}"/>
+                                                                <Setter Property="Height" Value="{Binding RelativeSource={RelativeSource AncestorType=Window}, Path=ButtonHeight}"/>
                                                                 <Style.Triggers>
-                                                                    <!-- 文件夹不显示图标 -->
                                                                     <DataTrigger Binding="{Binding IsFolder}" Value="True">
-                                                                        <Setter Property="Visibility" Value="Collapsed"/>
-                                                                    </DataTrigger>
-                                                                    <!-- 只显示名称模式：隐藏图标 -->
-                                                                    <DataTrigger Binding="{Binding RelativeSource={RelativeSource AncestorType=Window}, Path=CurrentDisplayMode}" Value="2">
-                                                                        <Setter Property="Visibility" Value="Collapsed"/>
+                                                                        <Setter Property="Width" Value="Auto"/>
+                                                                        <Setter Property="Height" Value="Auto"/>
+                                                                        <Setter Property="Padding" Value="15,8"/>
                                                                     </DataTrigger>
                                                                 </Style.Triggers>
                                                             </Style>
-                                                        </Image.Style>
-                                                    </Image>
-                                                    <TextBlock Text="{Binding Name}" TextAlignment="Center" TextWrapping="Wrap" FontSize="11" Foreground="{DynamicResource TextBrush}" MaxHeight="32" TextTrimming="CharacterEllipsis">
-                                                        <TextBlock.Style>
-                                                            <Style TargetType="TextBlock">
-                                                                <Setter Property="Visibility" Value="Collapsed"/>
-                                                                <Style.Triggers>
-                                                                    <!-- 文件夹始终显示文字 -->
-                                                                    <DataTrigger Binding="{Binding IsFolder}" Value="True">
+                                                        </Button.Style>
+                                                        <StackPanel VerticalAlignment="Top">
+                                                            <Image Source="{Binding Icon}" Width="{Binding RelativeSource={RelativeSource AncestorType=Window}, Path=IconSize}" Height="{Binding RelativeSource={RelativeSource AncestorType=Window}, Path=IconSize}" Margin="0,5,0,5" RenderOptions.BitmapScalingMode="HighQuality">
+                                                                <Image.Style>
+                                                                    <Style TargetType="Image">
                                                                         <Setter Property="Visibility" Value="Visible"/>
-                                                                        <Setter Property="Margin" Value="0"/>
-                                                                    </DataTrigger>
-                                                                    <!-- 图标+名称模式：显示文字 -->
-                                                                    <DataTrigger Binding="{Binding RelativeSource={RelativeSource AncestorType=Window}, Path=CurrentDisplayMode}" Value="0">
-                                                                        <Setter Property="Visibility" Value="Visible"/>
-                                                                    </DataTrigger>
-                                                                    <!-- 只显示名称模式：显示文字 -->
-                                                                    <DataTrigger Binding="{Binding RelativeSource={RelativeSource AncestorType=Window}, Path=CurrentDisplayMode}" Value="2">
-                                                                        <Setter Property="Visibility" Value="Visible"/>
-                                                                    </DataTrigger>
-                                                                </Style.Triggers>
-                                                            </Style>
-                                                        </TextBlock.Style>
-                                                    </TextBlock>
-                                                </StackPanel>
-                                            </Button>
-                                        </DataTemplate>
-                                    </ItemsControl.ItemTemplate>
-                                </ItemsControl>
+                                                                        <Style.Triggers>
+                                                                            <!-- 文件夹不显示图标 -->
+                                                                            <DataTrigger Binding="{Binding IsFolder}" Value="True">
+                                                                                <Setter Property="Visibility" Value="Collapsed"/>
+                                                                            </DataTrigger>
+                                                                            <!-- 只显示名称模式：隐藏图标 -->
+                                                                            <DataTrigger Binding="{Binding RelativeSource={RelativeSource AncestorType=Window}, Path=CurrentDisplayMode}" Value="2">
+                                                                                <Setter Property="Visibility" Value="Collapsed"/>
+                                                                            </DataTrigger>
+                                                                        </Style.Triggers>
+                                                                    </Style>
+                                                                </Image.Style>
+                                                            </Image>
+                                                            <TextBlock Text="{Binding Name}" TextAlignment="Center" TextWrapping="Wrap" FontSize="11" Foreground="{DynamicResource TextBrush}" MaxHeight="32" TextTrimming="CharacterEllipsis">
+                                                                <TextBlock.Style>
+                                                                    <Style TargetType="TextBlock">
+                                                                        <Setter Property="Visibility" Value="Collapsed"/>
+                                                                        <Style.Triggers>
+                                                                            <!-- 文件夹始终显示文字 -->
+                                                                            <DataTrigger Binding="{Binding IsFolder}" Value="True">
+                                                                                <Setter Property="Visibility" Value="Visible"/>
+                                                                                <Setter Property="Margin" Value="0"/>
+                                                                            </DataTrigger>
+                                                                            <!-- 图标+名称模式：显示文字 -->
+                                                                            <DataTrigger Binding="{Binding RelativeSource={RelativeSource AncestorType=Window}, Path=CurrentDisplayMode}" Value="0">
+                                                                                <Setter Property="Visibility" Value="Visible"/>
+                                                                            </DataTrigger>
+                                                                            <!-- 只显示名称模式：显示文字 -->
+                                                                            <DataTrigger Binding="{Binding RelativeSource={RelativeSource AncestorType=Window}, Path=CurrentDisplayMode}" Value="2">
+                                                                                <Setter Property="Visibility" Value="Visible"/>
+                                                                            </DataTrigger>
+                                                                        </Style.Triggers>
+                                                                    </Style>
+                                                                </TextBlock.Style>
+                                                            </TextBlock>
+                                                        </StackPanel>
+                                                    </Button>
+                                                </DataTemplate>
+                                            </ItemsControl.ItemTemplate>
+                                        </ItemsControl>
+                                    </StackPanel>
+                                </Border>
                             </DataTemplate>
                         </ItemsControl.ItemTemplate>
                     </ItemsControl>
@@ -167,7 +213,7 @@
                 </StackPanel>
 
                 <Button Grid.Row="4" Content="📂 管理快捷方式 (打开文件夹)" Margin="0,20,0,0" Padding="8" Click="OpenFolder_Click" Background="{DynamicResource BackgroundBrush}" Foreground="{DynamicResource LinkBrush}" BorderBrush="{DynamicResource BorderBrush}"/>
-                <TextBlock Grid.Row="5" Text="提示：在文件夹根目录中放置快捷方式会直接显示。在子文件夹中的快捷方式会显示为文件夹按钮，点击展开/折叠其中的图标。拖拽边缘可调整窗口大小。" TextWrapping="Wrap" Foreground="{DynamicResource SecondaryTextBrush}" Margin="0,10,0,0" FontSize="11" VerticalAlignment="Top"/>
+                <TextBlock Grid.Row="5" Text="提示：在文件夹根目录中放置快捷方式会直接显示。子文件夹的快捷方式会显示在分组框中。可以拖拽图标调整顺序，位置会自动保存。拖拽边缘可调整窗口大小。" TextWrapping="Wrap" Foreground="{DynamicResource SecondaryTextBrush}" Margin="0,10,0,0" FontSize="11" VerticalAlignment="Top"/>
 
                 <Button Grid.Row="6" Content="⬅️ 返回" HorizontalAlignment="Left" Padding="15,6" Click="ToggleSettings_Click" Background="{DynamicResource BackgroundBrush}" Foreground="{DynamicResource TextBrush}" BorderBrush="{DynamicResource BorderBrush}" BorderThickness="1"/>
             </Grid>
