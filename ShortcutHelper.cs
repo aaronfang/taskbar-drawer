@@ -2,6 +2,8 @@ using System.Diagnostics;
 using System.Drawing;
 using System.IO;
 using System.Runtime.InteropServices;
+using System.Runtime.InteropServices.ComTypes;
+using System.Text;
 using System.Windows;
 using System.Windows.Interop;
 using System.Windows.Media.Imaging;
@@ -71,7 +73,79 @@ public static class ShortcutHelper
     private const uint SHGFI_ICON = 0x100;
     private const uint SHGFI_LARGEICON = 0x0;
 
+    // COM 接口用于解析 .lnk 快捷方式
+    [ComImport]
+    [Guid("000214F9-0000-0000-C000-000000000046")]
+    [InterfaceType(ComInterfaceType.InterfaceIsIUnknown)]
+    private interface IShellLinkW
+    {
+        void GetPath([Out, MarshalAs(UnmanagedType.LPWStr)] StringBuilder pszFile, int cchMaxPath, IntPtr pfd, uint fFlags);
+        void GetIDList(out IntPtr ppidl);
+        void SetIDList(IntPtr pidl);
+        void GetDescription([Out, MarshalAs(UnmanagedType.LPWStr)] StringBuilder pszName, int cchMaxName);
+        void SetDescription([MarshalAs(UnmanagedType.LPWStr)] string pszName);
+        void GetWorkingDirectory([Out, MarshalAs(UnmanagedType.LPWStr)] StringBuilder pszDir, int cchMaxPath);
+        void SetWorkingDirectory([MarshalAs(UnmanagedType.LPWStr)] string pszDir);
+        void GetArguments([Out, MarshalAs(UnmanagedType.LPWStr)] StringBuilder pszArgs, int cchMaxPath);
+        void SetArguments([MarshalAs(UnmanagedType.LPWStr)] string pszArgs);
+        void GetHotkey(out short pwHotkey);
+        void SetHotkey(short wHotkey);
+        void GetShowCmd(out int piShowCmd);
+        void SetShowCmd(int iShowCmd);
+        void GetIconLocation([Out, MarshalAs(UnmanagedType.LPWStr)] StringBuilder pszIconPath, int cchIconPath, out int piIcon);
+        void SetIconLocation([MarshalAs(UnmanagedType.LPWStr)] string pszIconPath, int iIcon);
+        void SetRelativePath([MarshalAs(UnmanagedType.LPWStr)] string pszPathRel, uint dwReserved);
+        void Resolve(IntPtr hwnd, uint fFlags);
+        void SetPath([MarshalAs(UnmanagedType.LPWStr)] string pszFile);
+    }
+
+    [ComImport]
+    [Guid("0000010b-0000-0000-C000-000000000046")]
+    [InterfaceType(ComInterfaceType.InterfaceIsIUnknown)]
+    private interface IPersistFile
+    {
+        void GetClassID(out Guid pClassID);
+        [PreserveSig]
+        int IsDirty();
+        void Load([MarshalAs(UnmanagedType.LPWStr)] string pszFileName, uint dwMode);
+        void Save([MarshalAs(UnmanagedType.LPWStr)] string pszFileName, [MarshalAs(UnmanagedType.Bool)] bool fRemember);
+        void SaveCompleted([MarshalAs(UnmanagedType.LPWStr)] string pszFileName);
+        void GetCurFile([MarshalAs(UnmanagedType.LPWStr)] out string ppszFileName);
+    }
+
+    [ComImport]
+    [Guid("00021401-0000-0000-C000-000000000046")]
+    private class ShellLink
+    {
+    }
+
     private static bool IsShortcut(string f) => f.EndsWith(".lnk", StringComparison.OrdinalIgnoreCase) || f.EndsWith(".url", StringComparison.OrdinalIgnoreCase);
+
+    /// <summary>
+    /// 解析 .lnk 快捷方式文件,获取目标路径
+    /// </summary>
+    private static string? GetShortcutTarget(string shortcutPath)
+    {
+        if (!shortcutPath.EndsWith(".lnk", StringComparison.OrdinalIgnoreCase))
+            return shortcutPath;
+
+        try
+        {
+            var link = (IShellLinkW)new ShellLink();
+            ((IPersistFile)link).Load(shortcutPath, 0);
+            
+            var sb = new StringBuilder(260);
+            link.GetPath(sb, sb.Capacity, IntPtr.Zero, 0);
+            
+            var target = sb.ToString();
+            return string.IsNullOrEmpty(target) ? null : target;
+        }
+        catch (Exception ex)
+        {
+            System.Diagnostics.Debug.WriteLine($"Failed to resolve shortcut {shortcutPath}: {ex.Message}");
+            return null;
+        }
+    }
 
     public static List<ShortcutCategory> GetCategoriesFromFolder(string rootPath, Dictionary<string, int>? customOrder = null, Dictionary<string, bool>? folderExpandStates = null)
     {
@@ -190,7 +264,22 @@ public static class ShortcutHelper
 
     private static System.Windows.Media.ImageSource? ExtractIconSafe(string filePath)
     {
-        // 方法1：使用 SHGetFileInfo - 这是最可靠的方法，直接从 shell 获取图标
+        // 对于 .lnk 文件,先尝试获取目标路径
+        string? targetPath = null;
+        if (filePath.EndsWith(".lnk", StringComparison.OrdinalIgnoreCase))
+        {
+            targetPath = GetShortcutTarget(filePath);
+            if (!string.IsNullOrEmpty(targetPath) && File.Exists(targetPath))
+            {
+                System.Diagnostics.Debug.WriteLine($"Resolved shortcut: {filePath} -> {targetPath}");
+                // 优先从目标程序提取图标
+                var targetIcon = TryExtractIcon(targetPath);
+                if (targetIcon != null)
+                    return targetIcon;
+            }
+        }
+
+        // 方法1：使用 SHGetFileInfo - 从快捷方式本身获取图标
         try
         {
             SHFILEINFO shinfo = new SHFILEINFO();
@@ -247,6 +336,55 @@ public static class ShortcutHelper
         return GetDefaultIcon();
     }
 
+    /// <summary>
+    /// 尝试从文件提取图标(用于目标程序)
+    /// </summary>
+    private static System.Windows.Media.ImageSource? TryExtractIcon(string filePath)
+    {
+        try
+        {
+            // 方法1：ExtractAssociatedIcon
+            var icon = Icon.ExtractAssociatedIcon(filePath);
+            if (icon != null)
+            {
+                try
+                {
+                    return IconToImageSourceFromHIcon(icon.Handle);
+                }
+                finally
+                {
+                    icon.Dispose();
+                }
+            }
+        }
+        catch (Exception ex)
+        {
+            System.Diagnostics.Debug.WriteLine($"TryExtractIcon failed for {filePath}: {ex.Message}");
+        }
+
+        // 方法2：SHGetFileInfo
+        try
+        {
+            SHFILEINFO shinfo = new SHFILEINFO();
+            IntPtr hImg = SHGetFileInfo(filePath, 0, ref shinfo, (uint)Marshal.SizeOf(shinfo), SHGFI_ICON | SHGFI_LARGEICON);
+
+            if (hImg != IntPtr.Zero && shinfo.hIcon != IntPtr.Zero)
+            {
+                try
+                {
+                    return IconToImageSourceFromHIcon(shinfo.hIcon);
+                }
+                finally
+                {
+                    DestroyIcon(shinfo.hIcon);
+                }
+            }
+        }
+        catch { }
+
+        return null;
+    }
+
     private static List<ShortcutItem> GetShortcuts(string[] files)
     {
         var result = new List<ShortcutItem>();
@@ -263,11 +401,22 @@ public static class ShortcutHelper
                     iconSource = GetDefaultIcon();
                 }
 
+                // 获取真实目标路径(用于启动程序)
+                var targetPath = file;
+                if (file.EndsWith(".lnk", StringComparison.OrdinalIgnoreCase))
+                {
+                    var resolvedTarget = GetShortcutTarget(file);
+                    if (!string.IsNullOrEmpty(resolvedTarget))
+                    {
+                        targetPath = resolvedTarget;
+                    }
+                }
+
                 result.Add(new ShortcutItem
                 {
                     Name = Path.GetFileNameWithoutExtension(file),
                     FilePath = file,
-                    TargetPath = file,
+                    TargetPath = targetPath,
                     Icon = iconSource
                 });
             }
