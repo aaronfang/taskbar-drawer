@@ -19,6 +19,10 @@ public class AppSettings
     public DisplayMode DisplayMode { get; set; } = DisplayMode.IconAndName;
     public Dictionary<string, int> CustomOrder { get; set; } = new Dictionary<string, int>();
     public Dictionary<string, bool> FolderExpandStates { get; set; } = new Dictionary<string, bool>();
+    
+    // 背景模糊设置
+    public double BackgroundOpacity { get; set; } = 0.75;  // 透明度 0-1 (默认75%)
+    public bool EnableBlur { get; set; } = true;  // 是否启用模糊效果
 }
 
 public static class SettingsManager

@@ -7,7 +7,7 @@
         Deactivated="Window_Deactivated" Loaded="Window_Loaded"
         Closing="Window_Closing" SizeChanged="Window_SizeChanged" x:Name="Self">
     <WindowChrome.WindowChrome>
-        <WindowChrome CaptionHeight="0" ResizeBorderThickness="8" GlassFrameThickness="0" CornerRadius="0"/>
+        <WindowChrome CaptionHeight="0" ResizeBorderThickness="10" GlassFrameThickness="1" CornerRadius="8"/>
     </WindowChrome.WindowChrome>
     <Window.Resources>
         <BooleanToVisibilityConverter x:Key="BooleanToVisibilityConverter"/>
@@ -35,7 +35,7 @@
         </Style>
     </Window.Resources>
     
-    <Border Background="{DynamicResource BackgroundBrush}" CornerRadius="12" BorderThickness="1" BorderBrush="{DynamicResource BorderBrush}" Margin="15">
+    <Border x:Name="MainBorder" Background="{DynamicResource BackgroundBrush}" CornerRadius="8" BorderThickness="0">
         <Border.Effect>
             <DropShadowEffect BlurRadius="20" ShadowDepth="4" Opacity="0.2"/>
         </Border.Effect>
@@ -187,6 +187,8 @@
                     <RowDefinition Height="Auto"/>
                     <RowDefinition Height="Auto"/>
                     <RowDefinition Height="Auto"/>
+                    <RowDefinition Height="Auto"/>
+                    <RowDefinition Height="Auto"/>
                     <RowDefinition Height="*"/>
                     <RowDefinition Height="Auto"/>
                 </Grid.RowDefinitions>
@@ -194,28 +196,41 @@
                 <TextBlock Text="设置 (Settings)" FontWeight="SemiBold" FontSize="16" Foreground="{DynamicResource TextBrush}" Margin="0,0,0,10"/>
                 
                 <StackPanel Grid.Row="1" Margin="0,10,0,0">
-                    <TextBlock Text="图标大小 (Icon Size)" Foreground="{DynamicResource SecondaryTextBrush}" Margin="0,0,0,5"/>
+                    <TextBlock Text="图标大小 (Icon Size)" Foreground="{DynamicResource TextBrush}" Margin="0,0,0,5"/>
                     <Slider Minimum="24" Maximum="72" Value="{Binding RelativeSource={RelativeSource AncestorType=Window}, Path=IconSize}" ValueChanged="IconSizeSlider_ValueChanged"/>
                 </StackPanel>
                 
                 <StackPanel Grid.Row="2" Margin="0,15,0,0" Orientation="Horizontal">
-                    <TextBlock Text="暗色模式 (Dark Mode)" Foreground="{DynamicResource SecondaryTextBrush}" VerticalAlignment="Center" Width="150"/>
-                    <CheckBox x:Name="DarkModeCheck" VerticalAlignment="Center" Checked="Theme_Changed" Unchecked="Theme_Changed"/>
+                    <TextBlock Text="暗色模式 (Dark Mode)" Foreground="{DynamicResource TextBrush}" VerticalAlignment="Center" Width="150"/>
+                    <CheckBox x:Name="DarkModeCheck" VerticalAlignment="Center" Checked="Theme_Changed" Unchecked="Theme_Changed" Foreground="{DynamicResource TextBrush}"/>
                 </StackPanel>
 
                 <StackPanel Grid.Row="3" Margin="0,15,0,0">
-                    <TextBlock Text="显示模式 (Display Mode)" Foreground="{DynamicResource SecondaryTextBrush}" Margin="0,0,0,5"/>
+                    <TextBlock Text="显示模式 (Display Mode)" Foreground="{DynamicResource TextBrush}" Margin="0,0,0,5"/>
                     <StackPanel Orientation="Vertical">
-                        <RadioButton x:Name="IconAndNameRadio" Content="图标+名称" GroupName="DisplayMode" Margin="0,3" Checked="DisplayMode_Changed"/>
-                        <RadioButton x:Name="IconOnlyRadio" Content="只显示图标" GroupName="DisplayMode" Margin="0,3" Checked="DisplayMode_Changed"/>
-                        <RadioButton x:Name="NameOnlyRadio" Content="只显示名称" GroupName="DisplayMode" Margin="0,3" Checked="DisplayMode_Changed"/>
+                        <RadioButton x:Name="IconAndNameRadio" Content="图标+名称" GroupName="DisplayMode" Margin="0,3" Checked="DisplayMode_Changed" Foreground="{DynamicResource TextBrush}"/>
+                        <RadioButton x:Name="IconOnlyRadio" Content="只显示图标" GroupName="DisplayMode" Margin="0,3" Checked="DisplayMode_Changed" Foreground="{DynamicResource TextBrush}"/>
+                        <RadioButton x:Name="NameOnlyRadio" Content="只显示名称" GroupName="DisplayMode" Margin="0,3" Checked="DisplayMode_Changed" Foreground="{DynamicResource TextBrush}"/>
                     </StackPanel>
                 </StackPanel>
 
-                <Button Grid.Row="4" Content="📂 管理快捷方式 (打开文件夹)" Margin="0,20,0,0" Padding="8" Click="OpenFolder_Click" Background="{DynamicResource BackgroundBrush}" Foreground="{DynamicResource LinkBrush}" BorderBrush="{DynamicResource BorderBrush}"/>
-                <TextBlock Grid.Row="5" Text="提示：在文件夹根目录中放置快捷方式会直接显示。子文件夹的快捷方式会显示在分组框中。可以拖拽图标调整顺序，位置会自动保存。拖拽边缘可调整窗口大小。" TextWrapping="Wrap" Foreground="{DynamicResource SecondaryTextBrush}" Margin="0,10,0,0" FontSize="11" VerticalAlignment="Top"/>
+                <StackPanel Grid.Row="4" Margin="0,15,0,0" Orientation="Horizontal">
+                    <TextBlock Text="启用模糊效果 (Enable Blur)" Foreground="{DynamicResource TextBrush}" VerticalAlignment="Center" Width="150"/>
+                    <CheckBox x:Name="EnableBlurCheck" VerticalAlignment="Center" Checked="BlurSettings_Changed" Unchecked="BlurSettings_Changed" Foreground="{DynamicResource TextBrush}"/>
+                </StackPanel>
 
-                <Button Grid.Row="6" Content="⬅️ 返回" HorizontalAlignment="Left" Padding="15,6" Click="ToggleSettings_Click" Background="{DynamicResource BackgroundBrush}" Foreground="{DynamicResource TextBrush}" BorderBrush="{DynamicResource BorderBrush}" BorderThickness="1"/>
+                <StackPanel Grid.Row="5" Margin="0,15,0,0">
+                    <DockPanel>
+                        <TextBlock Text="背景透明度 (Opacity)" Foreground="{DynamicResource TextBrush}" Margin="0,0,10,5" DockPanel.Dock="Left"/>
+                        <TextBlock x:Name="OpacityValueText" Text="75%" Foreground="{DynamicResource TextBrush}" Margin="0,0,0,5" DockPanel.Dock="Right" HorizontalAlignment="Right"/>
+                    </DockPanel>
+                    <Slider x:Name="OpacitySlider" Minimum="0" Maximum="1" Value="0.75" TickFrequency="0.05" ValueChanged="OpacitySlider_ValueChanged"/>
+                </StackPanel>
+
+                <Button Grid.Row="6" Content="📂 管理快捷方式 (打开文件夹)" Margin="0,20,0,0" Padding="8" Click="OpenFolder_Click" Background="{DynamicResource BackgroundBrush}" Foreground="{DynamicResource LinkBrush}" BorderBrush="{DynamicResource BorderBrush}"/>
+                <TextBlock Grid.Row="7" Text="提示：在文件夹根目录中放置快捷方式会直接显示。子文件夹的快捷方式会显示在分组框中。可以拖拽图标调整顺序，位置会自动保存。拖拽边缘可调整窗口大小。" TextWrapping="Wrap" Foreground="{DynamicResource SecondaryTextBrush}" Margin="0,10,0,0" FontSize="11" VerticalAlignment="Top"/>
+
+                <Button Grid.Row="8" Content="⬅️ 返回" HorizontalAlignment="Left" Padding="15,6" Click="ToggleSettings_Click" Background="{DynamicResource BackgroundBrush}" Foreground="{DynamicResource TextBrush}" BorderBrush="{DynamicResource BorderBrush}" BorderThickness="1"/>
             </Grid>
 
         </Grid>

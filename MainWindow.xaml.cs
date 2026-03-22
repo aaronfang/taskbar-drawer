@@ -1,10 +1,12 @@
 ﻿using System.ComponentModel;
 using System.Diagnostics;
 using System.IO;
+using System.Runtime.InteropServices;
 using System.Windows;
 using System.Windows.Controls;
 using System.Windows.Controls.Primitives;
 using System.Windows.Input;
+using System.Windows.Interop;
 using System.Windows.Media;
 
 namespace TaskbarDrawer;
@@ -22,6 +24,47 @@ public partial class MainWindow : Window
     private ShortcutItem? _draggedItem;
     private string? _draggedCategory;
     private bool _isDragging = false;
+    
+    // Windows API for blur effect
+    [DllImport("user32.dll")]
+    private static extern int SetWindowCompositionAttribute(IntPtr hwnd, ref WindowCompositionAttributeData data);
+
+    [DllImport("dwmapi.dll")]
+    private static extern int DwmSetWindowAttribute(IntPtr hwnd, int attr, ref int attrValue, int attrSize);
+
+    private const int DWMWA_WINDOW_CORNER_PREFERENCE = 33;
+    private const int DWMWCP_ROUND = 2;
+
+    [StructLayout(LayoutKind.Sequential)]
+    private struct WindowCompositionAttributeData
+    {
+        public WindowCompositionAttribute Attribute;
+        public IntPtr Data;
+        public int SizeOfData;
+    }
+
+    [StructLayout(LayoutKind.Sequential)]
+    private struct AccentPolicy
+    {
+        public AccentState AccentState;
+        public int AccentFlags;
+        public int GradientColor;
+        public int AnimationId;
+    }
+
+    private enum WindowCompositionAttribute
+    {
+        WCA_ACCENT_POLICY = 19
+    }
+
+    private enum AccentState
+    {
+        ACCENT_DISABLED = 0,
+        ACCENT_ENABLE_GRADIENT = 1,
+        ACCENT_ENABLE_TRANSPARENTGRADIENT = 2,
+        ACCENT_ENABLE_BLURBEHIND = 3,
+        ACCENT_ENABLE_ACRYLICBLURBEHIND = 4
+    }
 
     public double IconSize
     {
@@ -97,6 +140,9 @@ public partial class MainWindow : Window
         IconSize = _settings.IconSize;
         CurrentDisplayMode = _settings.DisplayMode;
         DarkModeCheck.IsChecked = _settings.IsDarkMode;
+        EnableBlurCheck.IsChecked = _settings.EnableBlur;
+        OpacitySlider.Value = _settings.BackgroundOpacity;
+        UpdateOpacityText(_settings.BackgroundOpacity);
         UpdateDisplayModeRadioButtons();
         UpdateButtonMetrics();
         ApplyTheme();
@@ -110,6 +156,17 @@ public partial class MainWindow : Window
         }
 
         SetupNotifyIcon();
+        
+        // 设置Border的圆角裁剪
+        MainBorder.SizeChanged += (s, e) => UpdateBorderClip();
+    }
+
+    private void UpdateBorderClip()
+    {
+        var clip = new RectangleGeometry(
+            new Rect(0, 0, MainBorder.ActualWidth, MainBorder.ActualHeight),
+            8, 8); // RadiusX, RadiusY - 匹配Windows 11圆角
+        MainBorder.Clip = clip;
     }
 
     private void SetupNotifyIcon()
@@ -165,6 +222,7 @@ public partial class MainWindow : Window
         {
             _settings.IsDarkMode = DarkModeCheck.IsChecked.Value;
             ApplyTheme();
+            EnableBlur(); // 重新应用模糊效果以匹配新主题
             SaveSettings();
         }
     }
@@ -200,10 +258,120 @@ public partial class MainWindow : Window
         }
     }
 
+    private void OpacitySlider_ValueChanged(object sender, RoutedPropertyChangedEventArgs<double> e)
+    {
+        if (_settings != null && IsLoaded)
+        {
+            _settings.BackgroundOpacity = OpacitySlider.Value;
+            UpdateOpacityText(OpacitySlider.Value);
+            EnableBlur();
+            SaveSettings();
+        }
+    }
+
+    private void BlurSettings_Changed(object sender, RoutedEventArgs e)
+    {
+        if (_settings != null && EnableBlurCheck.IsChecked.HasValue && IsLoaded)
+        {
+            _settings.EnableBlur = EnableBlurCheck.IsChecked.Value;
+            EnableBlur();
+            SaveSettings();
+        }
+    }
+
+    private void UpdateOpacityText(double opacity)
+    {
+        if (OpacityValueText != null)
+        {
+            OpacityValueText.Text = $"{(int)(opacity * 100)}%";
+        }
+    }
+
     private void Window_Loaded(object sender, RoutedEventArgs e)
     {
         PositionWindow();
         LoadShortcuts();
+        SetWindowCornerPreference();
+        EnableBlur();
+    }
+
+    private void SetWindowCornerPreference()
+    {
+        try
+        {
+            var windowHelper = new WindowInteropHelper(this);
+            int preference = DWMWCP_ROUND;
+            DwmSetWindowAttribute(windowHelper.Handle, DWMWA_WINDOW_CORNER_PREFERENCE, ref preference, sizeof(int));
+        }
+        catch
+        {
+            // Windows 10或旧版本不支持此API，静默失败
+        }
+    }
+
+    private void EnableBlur()
+    {
+        try
+        {
+            var windowHelper = new WindowInteropHelper(this);
+            
+            // 计算Alpha值 (0-255)
+            byte alpha = (byte)(Math.Clamp(_settings.BackgroundOpacity, 0, 1) * 255);
+            
+            // 根据当前主题设置基础颜色
+            uint baseColor = _settings.IsDarkMode ? 0x202020u : 0xF9F9F9u;
+            uint gradientColor = (uint)(alpha << 24) | baseColor;
+            
+            // 如果禁用模糊,使用普通透明效果
+            if (!_settings.EnableBlur)
+            {
+                var accent = new AccentPolicy
+                {
+                    AccentState = AccentState.ACCENT_ENABLE_TRANSPARENTGRADIENT,
+                    GradientColor = (int)gradientColor
+                };
+
+                var accentStructSize = Marshal.SizeOf(accent);
+                var accentPtr = Marshal.AllocHGlobal(accentStructSize);
+                Marshal.StructureToPtr(accent, accentPtr, false);
+
+                var data = new WindowCompositionAttributeData
+                {
+                    Attribute = WindowCompositionAttribute.WCA_ACCENT_POLICY,
+                    SizeOfData = accentStructSize,
+                    Data = accentPtr
+                };
+
+                SetWindowCompositionAttribute(windowHelper.Handle, ref data);
+                Marshal.FreeHGlobal(accentPtr);
+                return;
+            }
+            
+            // 启用模糊效果
+            var accentPolicy = new AccentPolicy
+            {
+                AccentState = AccentState.ACCENT_ENABLE_ACRYLICBLURBEHIND,
+                GradientColor = (int)gradientColor
+            };
+
+            var size = Marshal.SizeOf(accentPolicy);
+            var ptr = Marshal.AllocHGlobal(size);
+            Marshal.StructureToPtr(accentPolicy, ptr, false);
+
+            var compositionData = new WindowCompositionAttributeData
+            {
+                Attribute = WindowCompositionAttribute.WCA_ACCENT_POLICY,
+                SizeOfData = size,
+                Data = ptr
+            };
+
+            SetWindowCompositionAttribute(windowHelper.Handle, ref compositionData);
+            Marshal.FreeHGlobal(ptr);
+        }
+        catch
+        {
+            // 如果模糊效果不支持(如旧版Windows),静默失败
+        }
     }
 
     public void ToggleVisibility()
