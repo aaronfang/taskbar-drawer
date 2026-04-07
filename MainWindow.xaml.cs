@@ -66,6 +66,35 @@ public partial class MainWindow : Window
         ACCENT_ENABLE_ACRYLICBLURBEHIND = 4
     }
 
+    // Layered window resize hit-test (AllowsTransparency=True breaks default resizing)
+    private const int WM_NCHITTEST = 0x0084;
+    private const int HTCLIENT = 1;
+    private const int HTLEFT = 10;
+    private const int HTRIGHT = 11;
+    private const int HTTOP = 12;
+    private const int HTTOPLEFT = 13;
+    private const int HTTOPRIGHT = 14;
+    private const int HTBOTTOM = 15;
+    private const int HTBOTTOMLEFT = 16;
+    private const int HTBOTTOMRIGHT = 17;
+
+    private const double ResizeBorder = 10.0;
+
+    [StructLayout(LayoutKind.Sequential)]
+    private struct RECT
+    {
+        public int Left;
+        public int Top;
+        public int Right;
+        public int Bottom;
+    }
+
+    [DllImport("user32.dll", SetLastError = true)]
+    private static extern bool GetWindowRect(IntPtr hWnd, out RECT lpRect);
+
+    [DllImport("user32.dll")]
+    private static extern uint GetDpiForWindow(IntPtr hwnd);
+
     public double IconSize
     {
         get { return (double)GetValue(IconSizeProperty); }
@@ -133,6 +162,8 @@ public partial class MainWindow : Window
     public MainWindow()
     {
         InitializeComponent();
+
+        SourceInitialized += (_, _) => AttachResizeHitTestHook();
         
         _settings = SettingsManager.Load();
         Width = _settings.WindowWidth;
@@ -159,6 +190,62 @@ public partial class MainWindow : Window
         
         // 设置Border的圆角裁剪
         MainBorder.SizeChanged += (s, e) => UpdateBorderClip();
+    }
+
+    private void AttachResizeHitTestHook()
+    {
+        // More reliable than PresentationSource.FromVisual(this) during initialization
+        var hwnd = new WindowInteropHelper(this).Handle;
+        if (hwnd == IntPtr.Zero) return;
+        var source = HwndSource.FromHwnd(hwnd);
+        source?.AddHook(WndProc);
+    }
+
+    private IntPtr WndProc(IntPtr hwnd, int msg, IntPtr wParam, IntPtr lParam, ref bool handled)
+    {
+        if (msg != WM_NCHITTEST || ResizeMode == ResizeMode.NoResize)
+        {
+            return IntPtr.Zero;
+        }
+
+        // Use screen-space window rect so hit-test works even on "empty" regions
+        // and is not affected by WPF layout / hit-test visibility of child controls.
+        if (!GetWindowRect(hwnd, out var rc))
+        {
+            return IntPtr.Zero;
+        }
+
+        int x = unchecked((short)(long)lParam);
+        int y = unchecked((short)((long)lParam >> 16));
+
+        // Convert logical border (DIP) to physical pixels
+        uint dpi = 96;
+        try { dpi = GetDpiForWindow(hwnd); } catch { }
+        double scale = Math.Clamp(dpi / 96.0, 1.0, 8.0);
+        int borderPx = (int)Math.Max(1, Math.Round(ResizeBorder * scale));
+
+        bool left = x >= rc.Left && x < rc.Left + borderPx;
+        bool right = x <= rc.Right && x > rc.Right - borderPx;
+        bool top = y >= rc.Top && y < rc.Top + borderPx;
+        bool bottom = y <= rc.Bottom && y > rc.Bottom - borderPx;
+
+        int ht = HTCLIENT;
+        if (top && left) ht = HTTOPLEFT;
+        else if (top && right) ht = HTTOPRIGHT;
+        else if (bottom && left) ht = HTBOTTOMLEFT;
+        else if (bottom && right) ht = HTBOTTOMRIGHT;
+        else if (left) ht = HTLEFT;
+        else if (right) ht = HTRIGHT;
+        else if (top) ht = HTTOP;
+        else if (bottom) ht = HTBOTTOM;
+
+        if (ht != HTCLIENT)
+        {
+            handled = true;
+            return new IntPtr(ht);
+        }
+
+        return IntPtr.Zero;
     }
 
     private void UpdateBorderClip()
@@ -190,11 +277,18 @@ public partial class MainWindow : Window
             Text = "AppDrawer"
         };
         
-        _notifyIcon.Click += (s, e) => ToggleVisibility();
+        // Click 事件在不同 Windows/焦点切换情况下触发时机不稳定，用 MouseUp（左键）更稳
+        _notifyIcon.MouseUp += (s, e) =>
+        {
+            if (e.Button == System.Windows.Forms.MouseButtons.Left)
+            {
+                ToggleVisibilityInternal(forceShow: true);
+            }
+        };
         
         var contextMenu = new System.Windows.Forms.ContextMenuStrip();
         var showItem = new System.Windows.Forms.ToolStripMenuItem("显示抽屉 (Show)");
-        showItem.Click += (s, e) => ToggleVisibility();
+        showItem.Click += (s, e) => ToggleVisibilityInternal(forceShow: true);
         var exitItem = new System.Windows.Forms.ToolStripMenuItem("完全退出 (Exit)");
         exitItem.Click += (s, e) => 
         {
@@ -376,21 +470,23 @@ public partial class MainWindow : Window
 
     public void ToggleVisibility()
     {
-        if ((DateTime.Now - _lastDeactivated).TotalMilliseconds < 300)
+        ToggleVisibilityInternal(forceShow: false);
+    }
+
+    private void ToggleVisibilityInternal(bool forceShow)
+    {
+        // 窗口失焦会立刻 Hide（见 Window_Deactivated）。
+        // 之前用 _lastDeactivated 的 300ms “忽略点击”会导致用户点托盘图标时偶发无法立刻弹出。
+        // 这里保证：只要当前不是“可见且激活”，就总是允许显示。
+        if (!forceShow && Visibility == Visibility.Visible && IsActive)
         {
+            HideWindow();
             return;
         }
 
-        if (Visibility == Visibility.Visible && IsActive)
-        {
-            HideWindow();
-        }
-        else
-        {
-            LoadShortcuts(); 
-            PositionWindow();
-            ShowWindow();
-        }
+        LoadShortcuts();
+        PositionWindow();
+        ShowWindow();
     }
 
     private void HideWindow()
